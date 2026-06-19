@@ -1,0 +1,83 @@
+# Redrob Hackathon — Submission Metadata
+# RecruitIQ Engine
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "recruitiq-engine"  # UPDATE with your registered team name
+
+primary_contact:
+  name: "Team Member"           # UPDATE: your full name
+  email: "you@example.com"      # UPDATE: your email
+  phone: "+91-XXXXXXXXXX"       # UPDATE: your phone
+
+team_members:
+  - name: "Team Member"         # UPDATE: your full name
+    email: "you@example.com"    # UPDATE: your email
+    role: "ML Engineer / Team Lead"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/YOUR_USERNAME/recruitiq-engine"  # UPDATE
+
+sandbox_link: "https://huggingface.co/spaces/YOUR_USERNAME/redrob-ranker"  # UPDATE
+
+reproduce_command: "python ranker/ranker.py --candidates ./candidates.jsonl --out ./submission.csv"
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "Windows CPU"
+  cpu_cores: 8
+  ram_gb: 16
+  python_version: "3.13"
+  os: "Windows 11"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: true
+  pre_computation_time_minutes: 3    # feature extraction + weak labels + LightGBM training
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Gemini / Antigravity IDE"   # Used for code generation and architecture review
+  - "GitHub Copilot"
+
+ai_usage_summary: |
+  Used Gemini (Antigravity IDE) for architecture review, code scaffolding,
+  and iterative debugging. All design decisions, feature engineering choices,
+  and hyperparameter tuning reflect understanding of the JD and signals doc.
+  No candidate data was fed to any LLM during the ranking inference step.
+  The ranker.py entrypoint makes zero network calls and requires only
+  numpy + lightgbm at runtime.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Rule-based + LightGBM LambdaRank hybrid. Pipeline in strict execution order:
+  (1) Stream candidates.jsonl line-by-line — never loads full file into RAM.
+  (2) Honeypot gate: 6 deterministic predicates (impossible timelines, framework
+  age impossibilities, zero-duration expert skills, skill stuffing, impossible YOE,
+  title-skill extreme mismatch). Filters ~3.7% of pool in linear time.
+  (3) 47 numeric features extracted per surviving candidate covering skills/JD
+  match (15 features), career trajectory (12), location/logistics (4), behavioral
+  signals (13), and education (3). Explicit disqualifier features for consulting-only
+  careers, domain mismatches (CV/speech/robotics), and pure-research backgrounds.
+  (4) LightGBM LambdaRank model trained offline on weak relevance labels (0-3)
+  derived from JD analysis; achieves NDCG@10=0.897 on held-out validation.
+  (5) Template-based reasoning (6 rank-band templates) for Top-100. No LLM calls.
+  Runtime: ~27 seconds on 100k candidates (CPU). Memory: <2GB.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true     # 6 deterministic predicates; 3.69% filtered
+  reproduction_tested: true

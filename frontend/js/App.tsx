@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import gsap from 'gsap';
 import { Upload, Activity, ShieldAlert, Download, Sun, Moon, Sparkles } from 'lucide-react';
-import { runRankingPipeline } from './lib/scorer';
-import type { Candidate, RankedResult } from './lib/scorer';
+import { runRankingPipeline, DEFAULT_JOB_CONFIG } from './lib/scorer';
+import type { Candidate, RankedResult, JobConfig } from './lib/scorer';
 import Hero3D from './components/Hero3D';
 import LenisProvider from './components/LenisProvider';
 import IngestionConsole from './components/IngestionConsole';
@@ -18,6 +18,7 @@ export default function App() {
   const [theme, setTheme] = useState('dark');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [rankedResults, setRankedResults] = useState<RankedResult[]>([]);
+  const [jobConfig, setJobConfig] = useState<JobConfig>(DEFAULT_JOB_CONFIG);
   const [searchQuery, setSearchQuery] = useState('');
   const [minYoe, setMinYoe] = useState(5);
   const [minScore, setMinScore] = useState(0.0);
@@ -54,7 +55,7 @@ export default function App() {
       const data = await res.json();
       if (Array.isArray(data)) {
         setCandidates(data);
-        const pipelineRes = runRankingPipeline(data, 100);
+        const pipelineRes = runRankingPipeline(data, 100, jobConfig);
         setRankedResults(pipelineRes.ranked.concat(pipelineRes.honeypots));
       }
       setIsParsing(false);
@@ -63,6 +64,18 @@ export default function App() {
       setIsParsing(false);
     }
   };
+
+  // Auto-rerank whenever jobConfig changes and we already have candidates loaded
+  const rerank = useCallback((cfg: JobConfig, cands: Candidate[]) => {
+    if (cands.length === 0) return;
+    const pipelineRes = runRankingPipeline(cands, 100, cfg);
+    setRankedResults(pipelineRes.ranked.concat(pipelineRes.honeypots));
+  }, []);
+
+  useEffect(() => {
+    rerank(jobConfig, candidates);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobConfig]);
 
   useEffect(() => {
     if (!mainRef.current) return;
@@ -129,7 +142,7 @@ export default function App() {
 
         if (Array.isArray(parsedData) && parsedData.length > 0) {
           setCandidates(parsedData);
-          const pipelineRes = runRankingPipeline(parsedData, 100);
+          const pipelineRes = runRankingPipeline(parsedData, 100, jobConfig);
           setRankedResults(pipelineRes.ranked.concat(pipelineRes.honeypots));
           setActiveTab(1); // Jump to dashboard
         } else {
@@ -256,6 +269,9 @@ export default function App() {
               uploadError={uploadError}
               onLoadSample={loadSampleDataset}
               onFileUpload={handleFileUpload}
+              jobConfig={jobConfig}
+              onJobConfigChange={setJobConfig}
+              onRerank={() => rerank(jobConfig, candidates)}
             />
           )}
           
@@ -273,6 +289,7 @@ export default function App() {
               selectedSkills={selectedSkills}
               toggleSkillFilter={toggleSkillFilter}
               onSelectCandidate={setSelectedCandidate}
+              jobConfig={jobConfig}
             />
           )}
 

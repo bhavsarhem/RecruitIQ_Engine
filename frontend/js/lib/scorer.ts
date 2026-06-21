@@ -3,6 +3,35 @@
  * Ported directly from ranker/scorer.py, honeypot_filter.py, and explainer.py
  */
 
+// ---------------------------------------------------------------------------
+// Job Configuration — drives all dynamic scoring parameters
+// ---------------------------------------------------------------------------
+
+export interface JobConfig {
+  jobTitle: string;
+  cities: string[];         // lowercase city names the scorer accepts as location match
+  yoeMin: number;           // preferred lower bound (sweet-spot centre)
+  yoeMax: number;           // preferred upper bound
+  requiredSkills: string[]; // keywords extracted from JD — each gets weight 1.0
+  taxonomyText: string;     // free-text JD blob shown in the UI textarea
+}
+
+export const DEFAULT_JOB_CONFIG: JobConfig = {
+  jobTitle: 'Senior AI / ML Engineer',
+  cities: ['bangalore', 'bengaluru', 'pune', 'noida', 'hyderabad', 'gurgaon', 'gurugram'],
+  yoeMin: 5,
+  yoeMax: 9,
+  requiredSkills: [
+    'python', 'pytorch', 'embeddings', 'faiss', 'sentence-transformers',
+    'vector database', 'pinecone', 'milvus', 'qdrant', 'information retrieval',
+    'lightgbm', 'ltr', 'ranking', 'ndcg', 'mrr', 'map', 'a/b testing', 'mlops'
+  ],
+  taxonomyText:
+    'Requires Python, PyTorch, embeddings (FAISS, Sentence-Transformers), vector databases ' +
+    '(Pinecone, Milvus, Qdrant), information retrieval, LightGBM/LTR, ranking metrics ' +
+    '(NDCG, MRR, MAP), A/B testing, and MLOps. Preferred: Product company backgrounds.',
+};
+
 export interface Skill {
   name: string;
   proficiency?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
@@ -287,8 +316,24 @@ function daysSince(dateStr: string | undefined): number {
   return diffDays < 0 ? 0 : diffDays;
 }
 
-function skillMatchesJd(skillName: string): { matched: boolean; weight: number } {
+function skillMatchesJd(
+  skillName: string,
+  config?: JobConfig
+): { matched: boolean; weight: number } {
   const nameLower = normalize(skillName);
+
+  // Dynamic required skills from job config (weight 1.0 for exact, 0.85 for partial)
+  if (config && config.requiredSkills.length > 0) {
+    for (const req of config.requiredSkills) {
+      const reqLower = req.toLowerCase().trim();
+      if (reqLower.length < 2) continue;
+      if (nameLower.includes(reqLower) || reqLower.includes(nameLower)) {
+        return { matched: true, weight: nameLower === reqLower ? 1.0 : 0.85 };
+      }
+    }
+  }
+
+  // Fallback: check static JD_HARD_SKILLS table
   for (const [kw, weight] of JD_HARD_SKILLS) {
     if (nameLower.includes(kw) || kw.includes(nameLower)) {
       return { matched: true, weight };
@@ -495,7 +540,7 @@ export function isHoneypot(candidate: Candidate): { flagged: boolean; reasons: s
 // 47 Features Extraction
 // ---------------------------------------------------------------------------
 
-export function extractFeatureVector(candidate: Candidate): Record<string, number> {
+export function extractFeatureVector(candidate: Candidate, config?: JobConfig): Record<string, number> {
   const profile = candidate.profile || {};
   const career = candidate.career_history || [];
   const skills = candidate.skills || [];
@@ -520,7 +565,7 @@ export function extractFeatureVector(candidate: Candidate): Record<string, numbe
     const endorsements = skill.endorsements || 0;
     const duration = skill.duration_months || 0;
 
-    const matchRes = skillMatchesJd(name);
+    const matchRes = skillMatchesJd(name, config);
     if (matchRes.matched) {
       const profMult = { beginner: 0.4, intermediate: 0.7, advanced: 0.9, expert: 1.0 }[proficiency] || 0.5;
       const finalWeight = matchRes.weight * profMult;
@@ -602,12 +647,20 @@ export function extractFeatureVector(candidate: Candidate): Record<string, numbe
   );
 
   const yoe = profile.years_of_experience || 0.0;
-  let yoeInRange = 0.2;
-  if (yoe >= 6.0 && yoe <= 8.0) yoeInRange = 1.0;
-  else if (yoe >= 5.0 && yoe <= 9.0) yoeInRange = 0.8;
-  else if (yoe >= 4.0 && yoe <= 10.0) yoeInRange = 0.5;
 
-  const yoePreferred = yoe >= 6.0 && yoe <= 8.0 ? 1.0 : 0.0;
+  // Dynamic YoE scoring based on config bounds
+  const cfgMin = config ? config.yoeMin : 5;
+  const cfgMax = config ? config.yoeMax : 9;
+  const cfgMid1 = cfgMin + (cfgMax - cfgMin) * 0.2;
+  const cfgMid2 = cfgMax - (cfgMax - cfgMin) * 0.2;
+  const cfgBuffer = Math.max(1, (cfgMax - cfgMin) * 0.25);
+
+  let yoeInRange = 0.2;
+  if (yoe >= cfgMid1 && yoe <= cfgMid2) yoeInRange = 1.0;
+  else if (yoe >= cfgMin && yoe <= cfgMax) yoeInRange = 0.8;
+  else if (yoe >= cfgMin - cfgBuffer && yoe <= cfgMax + cfgBuffer) yoeInRange = 0.5;
+
+  const yoePreferred = yoe >= cfgMid1 && yoe <= cfgMid2 ? 1.0 : 0.0;
 
   let totalCareerMonths = 0;
   let productMonths = 0;
@@ -682,12 +735,13 @@ export function extractFeatureVector(candidate: Candidate): Record<string, numbe
   const willingRelocate = !!signals.willing_to_relocate;
   const noticeDays = signals.notice_period_days ?? 90;
 
+  // Dynamic location scoring — use config cities when available
+  const activeCities = config && config.cities.length > 0
+    ? config.cities.map(c => c.toLowerCase().trim())
+    : ["pune", "noida", "hyderabad", "mumbai", "delhi", "ncr", "gurgaon", "gurugram", "bangalore", "bengaluru", "chennai"];
+
   let locationScore = 0.0;
-  if (
-    ["pune", "noida", "hyderabad", "mumbai", "delhi", "ncr", "gurgaon", "gurugram", "bangalore", "bengaluru", "chennai"].some(
-      (loc) => location.includes(loc)
-    )
-  ) {
+  if (activeCities.some((loc) => location.includes(loc))) {
     locationScore = 1.0;
   } else if (location.includes("india") || normalize(profile.country) === "india") {
     locationScore = 0.7;
@@ -993,7 +1047,11 @@ export interface RankedResult {
   reason?: string;
 }
 
-export function runRankingPipeline(candidates: Candidate[], topN: number = 20): {
+export function runRankingPipeline(
+  candidates: Candidate[],
+  topN: number = 20,
+  config?: JobConfig
+): {
   ranked: RankedResult[];
   honeypots: RankedResult[];
   honeypotCount: number;
@@ -1007,7 +1065,7 @@ export function runRankingPipeline(candidates: Candidate[], topN: number = 20): 
     if (!c || typeof c !== "object") continue;
 
     const hpRes = isHoneypot(c);
-    const feats = extractFeatureVector(c);
+    const feats = extractFeatureVector(c, config);
     const score = computeWeightedScore(feats);
     const aiCoreCount = countAiCoreSkills(c);
     const topSkills = topMatchedSkills(c, 5);

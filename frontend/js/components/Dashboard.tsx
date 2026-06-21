@@ -1,5 +1,5 @@
-import { Users, AlertTriangle, CheckCircle2, Star, Search, HelpCircle } from 'lucide-react';
-import type { RankedResult } from '../lib/scorer';
+import { Users, AlertTriangle, CheckCircle2, Star, Search, HelpCircle, Briefcase, MapPin, Zap } from 'lucide-react';
+import type { RankedResult, JobConfig } from '../lib/scorer';
 import { AI_CORE_SKILLS_FOR_DISPLAY } from '../lib/scorer';
 import CandidateCard from './CandidateCard';
 
@@ -16,6 +16,7 @@ interface DashboardProps {
   selectedSkills: string[];
   toggleSkillFilter: (s: string) => void;
   onSelectCandidate: (c: RankedResult) => void;
+  jobConfig?: JobConfig;
 }
 
 export default function Dashboard({
@@ -30,7 +31,8 @@ export default function Dashboard({
   setMinScore,
   selectedSkills,
   toggleSkillFilter,
-  onSelectCandidate
+  onSelectCandidate,
+  jobConfig,
 }: DashboardProps) {
   
   const maxScore = candidates.length > 0 ? Math.max(...candidates.map(c => c.score)) : 0.0;
@@ -46,7 +48,33 @@ export default function Dashboard({
 
   return (
     <div className="space-y-8">
-      
+
+      {/* Active scoring config context banner */}
+      {jobConfig && (
+        <div className="glass-panel px-5 py-3 border border-indigo-500/20 bg-indigo-500/5 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <span className="text-[9px] font-mono font-black text-indigo-400 uppercase tracking-widest shrink-0">Scoring Config</span>
+          <span className="flex items-center gap-1.5 text-[10px] font-mono text-secondary-theme">
+            <Briefcase size={10} className="text-indigo-400" />
+            <span className="font-bold text-primary-theme">{jobConfig.jobTitle}</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-[10px] font-mono text-secondary-theme">
+            <MapPin size={10} className="text-emerald-400" />
+            {jobConfig.cities.length > 0
+              ? jobConfig.cities.slice(0, 4).map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' · ')
+              : 'Any city'}
+            {jobConfig.cities.length > 4 && <span className="text-muted-theme"> +{jobConfig.cities.length - 4}</span>}
+          </span>
+          <span className="flex items-center gap-1.5 text-[10px] font-mono text-secondary-theme">
+            <span className="text-muted-theme">YoE</span>
+            <span className="font-bold text-primary-theme">{jobConfig.yoeMin}–{jobConfig.yoeMax} yrs</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-[10px] font-mono text-secondary-theme">
+            <Zap size={10} className="text-fuchsia-400" />
+            <span className="font-bold text-fuchsia-300">{jobConfig.requiredSkills.length} skills</span>
+          </span>
+        </div>
+      )}
+
       {/* KPI Stats Block */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[

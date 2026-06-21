@@ -1,0 +1,16 @@
+# RecruitIQ Engine — Dependencies
+#
+# ranker.py (Phase B — Online Ranker):
+#   Only requires stdlib + lightgbm + numpy (optional if no precomputed model)
+#   The weighted baseline runs on stdlib only.
+#
+# offline_lab/ (Phase A — Offline Lab, run once before submission):
+#   Requires all packages below.
+#
+# ── Core (required by ranker.py) ──────────────────────────────────────────
+numpy>=1.24.0
+lightgbm>=4.3.0
+scikit-learn>=1.4.0
+
+# ── Offline Lab only (Phase A) ────────────────────────────────────────────
+python-docx>=1.1.0
